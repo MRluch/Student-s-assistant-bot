@@ -52,7 +52,7 @@ async def get_password_and_logon(update, context):
         await update.message.reply_text("Вы ввели данные не от аккаунта ученика. Вход не произведен. "
                                         "Чтобы заново произвести вход введите /start")
     else:
-        await update.message.reply_text("Вы успешно авторизовались как ученик. Выберите действия:")
+        await update.message.reply_text("Вы успешно авторизовались как ученик. Выберите действия: /homework, /lesson_time")
     return ConversationHandler.END
 
 
@@ -77,6 +77,18 @@ async def homework_command(update, context):
         await update.message.reply_text(i)
 
 
+async def lesson_time_command(update, context):
+    global LOGIN, PASSWORD
+    soup = BeautifulSoup(SESSION.get("https://edu.tatar.ru/user/diary/day", headers=header).text, features="lxml")
+    lesson_time = []
+    n = 1
+    for i in soup.find('tbody').find_all('td'):
+        if len(i.text) == 11 and i.text.count(":") == 2:
+            lesson_time.append(f"{n} урок: " + i.text)
+            n += 1
+    await update.message.reply_text("\n".join(lesson_time))
+
+
 def logon():
     global SESSION
     datas = {
@@ -95,6 +107,7 @@ def logon():
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler('homework', homework_command))
+    application.add_handler(CommandHandler('lesson_time', lesson_time_command))
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(ConversationHandler(
         entry_points=[CommandHandler('start', start)],
