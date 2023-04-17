@@ -1,10 +1,13 @@
 import logging
-from telegram.ext import Application, MessageHandler, filters, CommandHandler, ConversationHandler
+from telegram import Update
+from telegram.ext import Application, MessageHandler, filters, CommandHandler, ConversationHandler, ContextTypes
 import requests
 from bs4 import BeautifulSoup
-import datetime as dt
+import datetime
+
 
 BOT_TOKEN = "6171562705:AAFfbU05aBM1pRFQnxOA2RSN_0vxgI_ERbo"
+application = Application.builder().token(BOT_TOKEN).build()
 USER_BD = dict()
 header = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -151,26 +154,64 @@ async def short_term_command(update, context):
         await update.message.reply_text(": ".join(i))
 
 
-async def set_timer(update, context):
-    chat_id = update.effective_message.chat_id
-    context.job_queue.run_once(task, 5, chat_id=chat_id, name=str(chat_id), data=5)
+async def notification(context: ContextTypes.DEFAULT_TYPE) -> None:
+    global USER_BD
+    job = context.job
+    soup = BeautifulSoup(USER_BD[job.data]["SESSION"].get("https://edu.tatar.ru/user/diary/day",
+                                                                       headers=header).text, features="lxml")
 
-    text = f'Вернусь через 5 с.!'
-    await update.effective_message.reply_text(text)
+    db = []
+    subjects_homeworks = []
+    lesson_time = []
+    n = 1
+    for i in soup.find('tbody').find_all('td'):
+        db.append(i.text)
+        if len(i.text) == 11 and i.text.count(":") == 2:
+            lesson_time.append(f"{n} урок: " + i.text)
+            n += 1
+
+    for i in range(len(db)):
+        if i % 5 == 1:
+            subjects_homeworks.append(
+                f"Предмет: {db[i][:]}"
+            )
+
+    if not lesson_time:
+        urls = soup.find('div', {"class": "dsw"}).find_all('a')
+        next_day = BeautifulSoup(USER_BD[job.data]["SESSION"].get(urls[1].get("href"),
+                                                                               headers=header).text, features="lxml")
+        lesson_time = []
+        n = 1
+        for i in next_day.find('tbody').find_all('td'):
+            if len(i.text) == 11 and i.text.count(":") == 2:
+                lesson_time.append(f"{n} урок: " + i.text)
+                n += 1
+
+    await context.bot.send_message(job.chat_id, text="Ваше расписание на сегодня:")
+
+    for i, j in zip(subjects_homeworks, lesson_time):
+        await context.bot.send_message(job.chat_id, text=f"{j}\n{i}")
+
+    context.job_queue.run_once(notification, 86400, chat_id=context.job.chat_id,
+                               name=str(context.job.chat_id), data=job.data)
 
 
-async def task(context):
-    await context.bot.send_message(context.job.chat_id, text=f'КУКУ! 5c. прошли!')
+async def set_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("Уведомления включены")
+    time_now = [int(i) for i in str(datetime.datetime.now().time())[:8].split(":")]
+    time_now = time_now[0] * 3600 + time_now[1] * 60 + time_now[2]
+    TIMER = 28800 - time_now if 28800 > time_now else 86400 - time_now + 28800
+    context.job_queue.run_once(notification, TIMER, chat_id=update.effective_message.chat_id,
+                               name=str(update.effective_message.chat_id), data=update.effective_user)
 
 
 def main():
-    application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler('homework', homework_command))
     application.add_handler(CommandHandler('lesson_time', lesson_time_command))
     application.add_handler(CommandHandler('full_term', full_term_command))
     application.add_handler(CommandHandler('short_term', short_term_command))
     application.add_handler(CommandHandler('help', help_command))
-    application.add_handler(CommandHandler("set", set_timer))
+    application.add_handler(CommandHandler('notifications', set_notifications))
     application.add_handler(ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
