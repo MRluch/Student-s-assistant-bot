@@ -28,7 +28,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "LOGIN": "",
         "PASSWORD": "",
         "SESSION": requests.Session(),
-        "SITE_CODE": ""
+        "SITE_CODE": "",
+        "IS_NEW_DAY": ""
     }
     await update.message.reply_html(
         rf"Привет {user.mention_html()}! Я твой помощник по школьным делам. Мне нужен ваш логин и пароль"
@@ -212,33 +213,39 @@ async def send_notification(context: ContextTypes.DEFAULT_TYPE) -> None:
 
         for i, j in zip(subjects_homeworks, lesson_time):
             await context.bot.send_message(job.chat_id, text=f"{j}\n{i}")
-
     context.job_queue.run_once(send_notification, 86400, chat_id=context.job.chat_id,
                                name=str(context.job.chat_id), data=job.data)
 
 
-async def send_mark(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # крч, надо теперь это втюхнуть в таймер; сделать, чтоб так же ежедневно обновляться без сообщения
+async def send_mark(context: ContextTypes.DEFAULT_TYPE) -> None:
     global USER_BD
     job = context.job
     soup = BeautifulSoup(USER_BD[job.data]["SESSION"].get("https://edu.tatar.ru/user/diary/day",
                                                           headers=header).text, features="lxml")
     urls = soup.find('div', {"class": "dsw"}).find_all('a')
-    soup = BeautifulSoup(USER_BD[update.effective_user]["SESSION"].get(urls[1].get("href"),
-                                                                       headers=header).text, features="lxml")
-    if USER_BD[update.effective_user]["SITE_CODE"] == "":
-        USER_BD[update.effective_user]["SITE_CODE"] = soup
-    elif USER_BD[update.effective_user]["SITE_CODE"] == soup:
-        pass
+    new_day = BeautifulSoup(USER_BD[job.data]["SESSION"].get(urls[1].get("href"),
+                                                             headers=header).text, features="lxml")
+    if USER_BD[job.data]["IS_NEW_DAY"] == "":
+        USER_BD[job.data]["IS_NEW_DAY"] = new_day
+    elif USER_BD[job.data]["IS_NEW_DAY"] == soup:
+        USER_BD[job.data]["IS_NEW_DAY"] = new_day
     else:
-        a = BeautifulSoup(USER_BD[job.data]["SESSION"].get("https://edu.tatar.ru/user/diary/day", headers=header).text,
-                          features="lxml").find("tbody").find_all('tr')
-        b = USER_BD[job.data]["SITE_CODE"].find("tbody").find_all('tr')
-        for i in set(a) - set(b):
-            i = i.text.split("\n")
-            if len(i) > 13:
-                await context.bot.send_message(context.job.chat_id, text=f"Вы получили оценку по предмету {i[2]}\n"
-                                                                         f"Оценка: {i[-4]}")
-        USER_BD[update.effective_user]["SITE_CODE"] = soup
+        if USER_BD[job.data]["SITE_CODE"] == "":
+            USER_BD[job.data]["SITE_CODE"] = soup
+        elif USER_BD[job.data]["SITE_CODE"] == soup:
+            pass
+        else:
+            a = BeautifulSoup(USER_BD[job.data]["SESSION"].get("https://edu.tatar.ru/user/diary/day", headers=header).text,
+                              features="lxml").find("tbody").find_all('tr')
+            b = USER_BD[job.data]["SITE_CODE"].find("tbody").find_all('tr')
+            for i in set(a) - set(b):
+                i = i.text.split("\n")
+                if len(i) > 13:
+                    await context.bot.send_message(context.job.chat_id, text=f"Вы получили оценку по предмету {i[2]}\n"
+                                                                             f"Оценка: {i[-4]}")
+            USER_BD[job.data]["SITE_CODE"] = soup
+    context.job_queue.run_once(send_mark, 600, chat_id=context.job.chat_id,
+                               name=str(context.job.chat_id), data=job.data)
 
 
 async def set_notifications_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -247,6 +254,8 @@ async def set_notifications_command(update: Update, context: ContextTypes.DEFAUL
     time_now = time_now[0] * 3600 + time_now[1] * 60 + time_now[2]
     TIMER = 28800 - time_now if 28800 > time_now else 86400 - time_now + 28800
     context.job_queue.run_once(send_notification, TIMER, chat_id=update.effective_message.chat_id,
+                               name=str(update.effective_message.chat_id), data=update.effective_user)
+    context.job_queue.run_once(send_mark, 600, chat_id=update.effective_message.chat_id,
                                name=str(update.effective_message.chat_id), data=update.effective_user)
 
 
