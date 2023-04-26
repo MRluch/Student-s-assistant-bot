@@ -39,7 +39,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(  # дополнить по мере завершения проекта
+    await update.message.reply_text(
         "/start - выходит из аккаунта, надо будет заново ввести логин и пароль\n"
         "/help - показывает эту информацию повторно\n"
         "/homework - показывает домашние задания на завтра\n"
@@ -77,7 +77,7 @@ async def get_password_and_logon(update: Update, context: ContextTypes.DEFAULT_T
     else:
         USER_BD[update.effective_user]["SESSION"].post('https://edu.tatar.ru/logon',
                                                        data=datas, headers=header)
-        await update.message.reply_text(  # дополнить по мере завершения проекта
+        await update.message.reply_text(
             "Вы успешно авторизовались как ученик. Выберите действия:\n"
             "/start - выходит из аккаунта, надо будет заново ввести логин и пароль\n"
             "/help - показывает эту информацию повторно\n"
@@ -145,13 +145,13 @@ async def full_term_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     global USER_BD
     term = BeautifulSoup(USER_BD[update.effective_user]["SESSION"].get("https://edu.tatar.ru/user/diary/term",
                                                                        headers=header).text, features="lxml")
-    termDB = []
+    term_db = []
     n = 1
     for i in term.find('tbody').find_all('tr'):
         if n != len(term.find('tbody').find_all('tr')):
-            termDB.append((i.text.split('\n'))[1:-4])
+            term_db.append((i.text.split('\n'))[1:-4])
         n += 1
-    for i in termDB:
+    for i in term_db:
         if '.' not in i[-1]:
             i[-1] = "- Оценки по данному предмету не ставятся"
         i = [j for j in i if j != ""]
@@ -162,13 +162,13 @@ async def short_term_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     global USER_BD
     term = BeautifulSoup(USER_BD[update.effective_user]["SESSION"].get("https://edu.tatar.ru/user/diary/term",
                                                                        headers=header).text, features="lxml")
-    termDB = []
+    term_db = []
     n = 1
     for i in term.find('tbody').find_all('tr'):
         if n != len(term.find('tbody').find_all('tr')):
-            termDB.append((i.text.split('\n'))[1:-4])
+            term_db.append((i.text.split('\n'))[1:-4])
         n += 1
-    for i in termDB:
+    for i in term_db:
         if '.' not in i[-1]:
             i[-1] = "Оценки по данному предмету не ставятся"
         i = [i[0], i[-1]]
@@ -210,7 +210,6 @@ async def send_notification(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if datetime.datetime.now().isoweekday() != 7:
         await context.bot.send_message(job.chat_id, text="Ваше расписание на сегодня:")
-
         for i, j in zip(subjects_homeworks, lesson_time):
             await context.bot.send_message(job.chat_id, text=f"{j}\n{i}")
     context.job_queue.run_once(send_notification, 86400, chat_id=context.job.chat_id,
@@ -235,8 +234,9 @@ async def send_mark(context: ContextTypes.DEFAULT_TYPE) -> None:
         elif USER_BD[job.data]["SITE_CODE"] == soup:
             pass
         else:
-            a = BeautifulSoup(USER_BD[job.data]["SESSION"].get("https://edu.tatar.ru/user/diary/day", headers=header).text,
-                              features="lxml").find("tbody").find_all('tr')
+            a = BeautifulSoup(
+                USER_BD[job.data]["SESSION"].get("https://edu.tatar.ru/user/diary/day", headers=header).text,
+                features="lxml").find("tbody").find_all('tr')
             b = USER_BD[job.data]["SITE_CODE"].find("tbody").find_all('tr')
             for i in set(a) - set(b):
                 i = i.text.split("\n")
@@ -252,8 +252,8 @@ async def set_notifications_command(update: Update, context: ContextTypes.DEFAUL
     await update.message.reply_text("Уведомления включены")
     time_now = [int(i) for i in str(datetime.datetime.now().time())[:8].split(":")]
     time_now = time_now[0] * 3600 + time_now[1] * 60 + time_now[2]
-    TIMER = 28800 - time_now if 28800 > time_now else 86400 - time_now + 28800
-    context.job_queue.run_once(send_notification, TIMER, chat_id=update.effective_message.chat_id,
+    timer = 28800 - time_now if 28800 > time_now else 86400 - time_now + 28800
+    context.job_queue.run_once(send_notification, timer, chat_id=update.effective_message.chat_id,
                                name=str(update.effective_message.chat_id), data=update.effective_user)
     context.job_queue.run_once(send_mark, 600, chat_id=update.effective_message.chat_id,
                                name=str(update.effective_message.chat_id), data=update.effective_user)
